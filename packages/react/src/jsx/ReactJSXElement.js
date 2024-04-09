@@ -853,6 +853,7 @@ export function cloneElement(element, config, children) {
 
   if (config != null) {
     if (hasValidRef(config)) {
+      owner = ReactCurrentOwner.owner;
       if (!enableRefAsProp) {
         // Silently steal the ref from the parent.
         ref = config.ref;
@@ -860,7 +861,6 @@ export function cloneElement(element, config, children) {
           ref = coerceStringRef(ref, owner, element.type);
         }
       }
-      owner = ReactCurrentOwner.current;
     }
     if (hasValidKey(config)) {
       if (__DEV__) {
