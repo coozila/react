@@ -26,7 +26,10 @@ import ReactSharedInternals from 'shared/ReactSharedInternals';
 const {ReactCurrentDispatcher} = ReactSharedInternals;
 
 let prefix;
-export function describeBuiltInComponentFrame(name: string): string {
+export function describeBuiltInComponentFrame(
+  name: string,
+  ownerFn: void | null | Function,
+): string {
   if (enableComponentStackLocations) {
     if (prefix === undefined) {
       // Extract the VM specific prefix used by each line.
@@ -40,12 +43,19 @@ export function describeBuiltInComponentFrame(name: string): string {
     // We use the prefix to ensure our stacks line up with native stack frames.
     return '\n' + prefix + name;
   } else {
-    return describeComponentFrame(name);
+    let ownerName = null;
+    if (__DEV__ && ownerFn) {
+      ownerName = ownerFn.displayName || ownerFn.name || null;
+    }
+    return describeComponentFrame(name, ownerName);
   }
 }
 
 export function describeDebugInfoFrame(name: string, env: ?string): string {
-  return describeBuiltInComponentFrame(name + (env ? ' (' + env + ')' : ''));
+  return describeBuiltInComponentFrame(
+    name + (env ? ' (' + env + ')' : ''),
+    null,
+  );
 }
 
 let reentry = false;
@@ -288,19 +298,29 @@ export function describeNativeComponentFrame(
   return syntheticFrame;
 }
 
-function describeComponentFrame(name: null | string) {
-  return '\n    in ' + (name || 'Unknown');
+function describeComponentFrame(name: null | string, ownerName: null | string) {
+  let sourceInfo = '';
+  if (ownerName) {
+    sourceInfo = ' (created by ' + ownerName + ')';
+  }
+  return '\n    in ' + (name || 'Unknown') + sourceInfo;
 }
 
-export function describeClassComponentFrame(ctor: Function): string {
+export function describeClassComponentFrame(
+  ctor: Function,
+  ownerFn: void | null | Function,
+): string {
   if (enableComponentStackLocations) {
     return describeNativeComponentFrame(ctor, true);
   } else {
-    return describeFunctionComponentFrame(ctor);
+    return describeFunctionComponentFrame(ctor, ownerFn);
   }
 }
 
-export function describeFunctionComponentFrame(fn: Function): string {
+export function describeFunctionComponentFrame(
+  fn: Function,
+  ownerFn: void | null | Function,
+): string {
   if (enableComponentStackLocations) {
     return describeNativeComponentFrame(fn, false);
   } else {
@@ -308,7 +328,11 @@ export function describeFunctionComponentFrame(fn: Function): string {
       return '';
     }
     const name = fn.displayName || fn.name || null;
-    return describeComponentFrame(name);
+    let ownerName = null;
+    if (__DEV__ && ownerFn) {
+      ownerName = ownerFn.displayName || ownerFn.name || null;
+    }
+    return describeComponentFrame(name, ownerName);
   }
 }
 
@@ -317,7 +341,10 @@ function shouldConstruct(Component: Function) {
   return !!(prototype && prototype.isReactComponent);
 }
 
-export function describeUnknownElementTypeFrameInDEV(type: any): string {
+export function describeUnknownElementTypeFrameInDEV(
+  type: any,
+  ownerFn: void | null | Function,
+): string {
   if (!__DEV__) {
     return '';
   }
@@ -328,32 +355,32 @@ export function describeUnknownElementTypeFrameInDEV(type: any): string {
     if (enableComponentStackLocations) {
       return describeNativeComponentFrame(type, shouldConstruct(type));
     } else {
-      return describeFunctionComponentFrame(type);
+      return describeFunctionComponentFrame(type, ownerFn);
     }
   }
   if (typeof type === 'string') {
-    return describeBuiltInComponentFrame(type);
+    return describeBuiltInComponentFrame(type, ownerFn);
   }
   switch (type) {
     case REACT_SUSPENSE_TYPE:
-      return describeBuiltInComponentFrame('Suspense');
+      return describeBuiltInComponentFrame('Suspense', ownerFn);
     case REACT_SUSPENSE_LIST_TYPE:
-      return describeBuiltInComponentFrame('SuspenseList');
+      return describeBuiltInComponentFrame('SuspenseList', ownerFn);
   }
   if (typeof type === 'object') {
     switch (type.$$typeof) {
       case REACT_FORWARD_REF_TYPE:
-        return describeFunctionComponentFrame(type.render);
+        return describeFunctionComponentFrame(type.render, ownerFn);
       case REACT_MEMO_TYPE:
         // Memo may contain any component type so we recursively resolve it.
-        return describeUnknownElementTypeFrameInDEV(type.type);
+        return describeUnknownElementTypeFrameInDEV(type.type, ownerFn);
       case REACT_LAZY_TYPE: {
         const lazyComponent: LazyComponent<any, any> = (type: any);
         const payload = lazyComponent._payload;
         const init = lazyComponent._init;
         try {
           // Lazy may contain any component type so we recursively resolve it.
-          return describeUnknownElementTypeFrameInDEV(init(payload));
+          return describeUnknownElementTypeFrameInDEV(init(payload), ownerFn);
         } catch (x) {}
       }
     }

@@ -58,7 +58,6 @@ import type {
   ReactComponentInfo,
   ReactAsyncInfo,
 } from 'shared/ReactTypes';
-import type {ReactElement} from 'shared/ReactElementType';
 import type {LazyComponent} from 'react/src/ReactLazy';
 import type {TemporaryReference} from './ReactFlightServerTemporaryReferences';
 
@@ -154,8 +153,7 @@ function patchConsole(consoleInst: typeof console, methodName: string) {
         // We don't currently use this id for anything but we emit it so that we can later
         // refer to previous logs in debug info to associate them with a component.
         const id = request.nextChunkId++;
-        const owner: null | ReactComponentInfo = ReactCurrentOwner.current;
-        emitConsoleChunk(request, id, methodName, owner, stack, arguments);
+        emitConsoleChunk(request, id, methodName, stack, arguments);
       }
       // $FlowFixMe[prop-missing]
       return originalMethod.apply(this, arguments);
@@ -305,7 +303,6 @@ const {
   ReactCurrentCache,
 } = ReactServerSharedInternals;
 const ReactCurrentDispatcher = ReactSharedInternals.ReactCurrentDispatcher;
-const ReactCurrentOwner = ReactSharedInternals.ReactCurrentOwner;
 
 function throwTaintViolation(message: string) {
   // eslint-disable-next-line react-internal/prod-error-codes
@@ -597,7 +594,6 @@ function renderFunctionComponent<Props>(
   key: null | string,
   Component: (p: Props, arg: void) => any,
   props: Props,
-  owner: null | ReactComponentInfo,
 ): ReactJSONValue {
   // Reset the task's thenable state before continuing, so that if a later
   // component suspends we can reuse the same task object. If the same
@@ -605,7 +601,6 @@ function renderFunctionComponent<Props>(
   const prevThenableState = task.thenableState;
   task.thenableState = null;
 
-  let componentDebugInfo: null | ReactComponentInfo = null;
   if (__DEV__) {
     if (debugID === null) {
       // We don't have a chunk to assign debug info. We need to outline this
@@ -614,42 +609,22 @@ function renderFunctionComponent<Props>(
     } else if (prevThenableState !== null) {
       // This is a replay and we've already emitted the debug info of this component
       // in the first pass. We skip emitting a duplicate line.
-      // As a hack we stashed the previous component debug info on this object in DEV.
-      componentDebugInfo = (prevThenableState: any)._componentDebugInfo;
     } else {
       // This is a new component in the same task so we can emit more debug info.
       const componentName =
         (Component: any).displayName || Component.name || '';
       request.pendingChunks++;
-
-      const componentDebugID = debugID;
-      componentDebugInfo = {
+      emitDebugChunk(request, debugID, {
         name: componentName,
         env: request.environmentName,
-        owner: owner,
-      };
-      // We outline this model eagerly so that we can refer to by reference as an owner.
-      // If we had a smarter way to dedupe we might not have to do this if there ends up
-      // being no references to this as an owner.
-      outlineModel(request, componentDebugInfo);
-      emitDebugChunk(request, componentDebugID, componentDebugInfo);
+      });
     }
   }
 
-  prepareToUseHooksForComponent(prevThenableState, componentDebugInfo);
+  prepareToUseHooksForComponent(prevThenableState);
   // The secondArg is always undefined in Server Components since refs error early.
   const secondArg = undefined;
-  let result;
-  if (__DEV__) {
-    ReactCurrentOwner.current = componentDebugInfo;
-    try {
-      result = Component(props, secondArg);
-    } finally {
-      ReactCurrentOwner.current = null;
-    }
-  } else {
-    result = Component(props, secondArg);
-  }
+  let result = Component(props, secondArg);
   if (
     typeof result === 'object' &&
     result !== null &&
@@ -748,12 +723,9 @@ function renderClientElement(
   type: any,
   key: null | string,
   props: any,
-  owner: null | ReactComponentInfo, // DEV-only
 ): ReactJSONValue {
   if (!enableServerComponentKeys) {
-    return __DEV__
-      ? [REACT_ELEMENT_TYPE, type, key, props, owner]
-      : [REACT_ELEMENT_TYPE, type, key, props];
+    return [REACT_ELEMENT_TYPE, type, key, props];
   }
   // We prepend the terminal client element that actually gets serialized with
   // the keys of any Server Components which are not serialized.
@@ -763,9 +735,7 @@ function renderClientElement(
   } else if (keyPath !== null) {
     key = keyPath + ',' + key;
   }
-  const element = __DEV__
-    ? [REACT_ELEMENT_TYPE, type, key, props, owner]
-    : [REACT_ELEMENT_TYPE, type, key, props];
+  const element = [REACT_ELEMENT_TYPE, type, key, props];
   if (task.implicitSlot && key !== null) {
     // The root Server Component had no key so it was in an implicit slot.
     // If we had a key lower, it would end up in that slot with an explicit key.
@@ -811,7 +781,6 @@ function renderElement(
   key: null | string,
   ref: mixed,
   props: any,
-  owner: null | ReactComponentInfo, // DEV only
 ): ReactJSONValue {
   if (ref !== null && ref !== undefined) {
     // When the ref moves to the regular props object this will implicitly
@@ -832,13 +801,13 @@ function renderElement(
   if (typeof type === 'function') {
     if (isClientReference(type) || isTemporaryReference(type)) {
       // This is a reference to a Client Component.
-      return renderClientElement(task, type, key, props, owner);
+      return renderClientElement(task, type, key, props);
     }
     // This is a Server Component.
-    return renderFunctionComponent(request, task, key, type, props, owner);
+    return renderFunctionComponent(request, task, key, type, props);
   } else if (typeof type === 'string') {
     // This is a host element. E.g. HTML.
-    return renderClientElement(task, type, key, props, owner);
+    return renderClientElement(task, type, key, props);
   } else if (typeof type === 'symbol') {
     if (type === REACT_FRAGMENT_TYPE && key === null) {
       // For key-less fragments, we add a small optimization to avoid serializing
@@ -859,39 +828,24 @@ function renderElement(
     }
     // This might be a built-in React component. We'll let the client decide.
     // Any built-in works as long as its props are serializable.
-    return renderClientElement(task, type, key, props, owner);
+    return renderClientElement(task, type, key, props);
   } else if (type != null && typeof type === 'object') {
     if (isClientReference(type)) {
       // This is a reference to a Client Component.
-      return renderClientElement(task, type, key, props, owner);
+      return renderClientElement(task, type, key, props);
     }
     switch (type.$$typeof) {
       case REACT_LAZY_TYPE: {
         const payload = type._payload;
         const init = type._init;
         const wrappedType = init(payload);
-        return renderElement(
-          request,
-          task,
-          wrappedType,
-          key,
-          ref,
-          props,
-          owner,
-        );
+        return renderElement(request, task, wrappedType, key, ref, props);
       }
       case REACT_FORWARD_REF_TYPE: {
-        return renderFunctionComponent(
-          request,
-          task,
-          key,
-          type.render,
-          props,
-          owner,
-        );
+        return renderFunctionComponent(request, task, key, type.render, props);
       }
       case REACT_MEMO_TYPE: {
-        return renderElement(request, task, type.type, key, ref, props, owner);
+        return renderElement(request, task, type.type, key, ref, props);
       }
     }
   }
@@ -1402,7 +1356,7 @@ function renderModelDestructive(
           writtenObjects.set((value: any).props, NEVER_OUTLINED);
         }
 
-        const element: ReactElement = (value: any);
+        const element: React$Element<any> = (value: any);
 
         if (__DEV__) {
           const debugInfo: ?ReactDebugInfo = (value: any)._debugInfo;
@@ -1440,7 +1394,6 @@ function renderModelDestructive(
           element.key,
           ref,
           props,
-          __DEV__ ? element._owner : null,
         );
       }
       case REACT_LAZY_TYPE: {
@@ -1951,27 +1904,8 @@ function emitDebugChunk(
     );
   }
 
-  // We use the console encoding so that we can dedupe objects but don't necessarily
-  // use the full serialization that requires a task.
-  const counter = {objectCount: 0};
-  function replacer(
-    this:
-      | {+[key: string | number]: ReactClientValue}
-      | $ReadOnlyArray<ReactClientValue>,
-    parentPropertyName: string,
-    value: ReactClientValue,
-  ): ReactJSONValue {
-    return renderConsoleValue(
-      request,
-      counter,
-      this,
-      parentPropertyName,
-      value,
-    );
-  }
-
   // $FlowFixMe[incompatible-type] stringify can return null
-  const json: string = stringify(debugInfo, replacer);
+  const json: string = stringify(debugInfo);
   const row = serializeRowHeader('D', id) + json + '\n';
   const processedChunk = stringToChunk(row);
   request.completedRegularChunks.push(processedChunk);
@@ -2273,7 +2207,6 @@ function emitConsoleChunk(
   request: Request,
   id: number,
   methodName: string,
-  owner: null | ReactComponentInfo,
   stackTrace: string,
   args: Array<any>,
 ): void {
@@ -2308,7 +2241,7 @@ function emitConsoleChunk(
 
   // TODO: Don't double badge if this log came from another Flight Client.
   const env = request.environmentName;
-  const payload = [methodName, stackTrace, owner, env];
+  const payload = [methodName, stackTrace, env];
   // $FlowFixMe[method-unbinding]
   payload.push.apply(payload, args);
   // $FlowFixMe[incompatible-type] stringify can return null

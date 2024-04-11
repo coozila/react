@@ -29,24 +29,29 @@ import {
 } from 'shared/ReactComponentStackFrame';
 
 function describeFiber(fiber: Fiber): string {
+  const owner: null | Function = __DEV__
+    ? fiber._debugOwner
+      ? fiber._debugOwner.type
+      : null
+    : null;
   switch (fiber.tag) {
     case HostHoistable:
     case HostSingleton:
     case HostComponent:
-      return describeBuiltInComponentFrame(fiber.type);
+      return describeBuiltInComponentFrame(fiber.type, owner);
     case LazyComponent:
-      return describeBuiltInComponentFrame('Lazy');
+      return describeBuiltInComponentFrame('Lazy', owner);
     case SuspenseComponent:
-      return describeBuiltInComponentFrame('Suspense');
+      return describeBuiltInComponentFrame('Suspense', owner);
     case SuspenseListComponent:
-      return describeBuiltInComponentFrame('SuspenseList');
+      return describeBuiltInComponentFrame('SuspenseList', owner);
     case FunctionComponent:
     case SimpleMemoComponent:
-      return describeFunctionComponentFrame(fiber.type);
+      return describeFunctionComponentFrame(fiber.type, owner);
     case ForwardRef:
-      return describeFunctionComponentFrame(fiber.type.render);
+      return describeFunctionComponentFrame(fiber.type.render, owner);
     case ClassComponent:
-      return describeClassComponentFrame(fiber.type);
+      return describeClassComponentFrame(fiber.type, owner);
     default:
       return '';
   }

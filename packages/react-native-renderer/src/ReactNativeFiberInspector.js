@@ -103,21 +103,13 @@ function getInspectorDataForInstance(
     }
 
     const fiber = findCurrentFiberUsingSlowPath(closestInstance);
-    if (fiber === null) {
-      // Might not be currently mounted.
-      return {
-        hierarchy: [],
-        props: emptyObject,
-        selectedIndex: null,
-        componentStack: '',
-      };
-    }
     const fiberHierarchy = getOwnerHierarchy(fiber);
     const instance = lastNonHostInstance(fiberHierarchy);
     const hierarchy = createHierarchy(fiberHierarchy);
     const props = getHostProps(instance);
     const selectedIndex = fiberHierarchy.indexOf(instance);
-    const componentStack = getStackByFiberInDevAndProd(fiber);
+    const componentStack =
+      fiber !== null ? getStackByFiberInDevAndProd(fiber) : '';
 
     return {
       closestInstance: instance,
@@ -133,7 +125,7 @@ function getInspectorDataForInstance(
   );
 }
 
-function getOwnerHierarchy(instance: Fiber) {
+function getOwnerHierarchy(instance: any) {
   const hierarchy: Array<$FlowFixMe> = [];
   traverseOwnerTreeUp(hierarchy, instance);
   return hierarchy;
@@ -151,17 +143,15 @@ function lastNonHostInstance(hierarchy) {
   return hierarchy[0];
 }
 
+// $FlowFixMe[missing-local-annot]
 function traverseOwnerTreeUp(
   hierarchy: Array<$FlowFixMe>,
-  instance: Fiber,
+  instance: any,
 ): void {
   if (__DEV__ || enableGetInspectorDataForInstanceInProduction) {
-    hierarchy.unshift(instance);
-    const owner = instance._debugOwner;
-    if (owner != null && typeof owner.tag === 'number') {
-      traverseOwnerTreeUp(hierarchy, (owner: any));
-    } else {
-      // TODO: Traverse Server Components owners.
+    if (instance) {
+      hierarchy.unshift(instance);
+      traverseOwnerTreeUp(hierarchy, instance._debugOwner);
     }
   }
 }

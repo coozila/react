@@ -47,7 +47,6 @@ import {
 } from 'react-reconciler/src/ReactWorkTags';
 import getComponentNameFromType from 'shared/getComponentNameFromType';
 import {REACT_STRICT_MODE_TYPE} from 'shared/ReactSymbols';
-import type {ReactComponentInfo} from '../../shared/ReactTypes';
 
 // Keep in sync with shared/getComponentNameFromType
 function getWrappedName(
@@ -65,18 +64,6 @@ function getWrappedName(
 // Keep in sync with shared/getComponentNameFromType
 function getContextName(type: ReactContext<any>) {
   return type.displayName || 'Context';
-}
-
-export function getComponentNameFromOwner(
-  owner: Fiber | ReactComponentInfo,
-): string | null {
-  if (typeof owner.tag === 'number') {
-    return getComponentNameFromFiber((owner: any));
-  }
-  if (typeof owner.name === 'string') {
-    return owner.name;
-  }
-  return null;
 }
 
 export default function getComponentNameFromFiber(fiber: Fiber): string | null {

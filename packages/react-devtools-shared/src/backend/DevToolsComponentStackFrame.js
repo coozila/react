@@ -33,7 +33,10 @@ import {
 import {disableLogs, reenableLogs} from './DevToolsConsolePatching';
 
 let prefix;
-export function describeBuiltInComponentFrame(name: string): string {
+export function describeBuiltInComponentFrame(
+  name: string,
+  ownerFn: void | null | Function,
+): string {
   if (prefix === undefined) {
     // Extract the VM specific prefix used by each line.
     try {
@@ -48,7 +51,10 @@ export function describeBuiltInComponentFrame(name: string): string {
 }
 
 export function describeDebugInfoFrame(name: string, env: ?string): string {
-  return describeBuiltInComponentFrame(name + (env ? ' (' + env + ')' : ''));
+  return describeBuiltInComponentFrame(
+    name + (env ? ' (' + env + ')' : ''),
+    null,
+  );
 }
 
 let reentry = false;
@@ -286,6 +292,7 @@ export function describeNativeComponentFrame(
 
 export function describeClassComponentFrame(
   ctor: Function,
+  ownerFn: void | null | Function,
   currentDispatcherRef: CurrentDispatcherRef,
 ): string {
   return describeNativeComponentFrame(ctor, true, currentDispatcherRef);
@@ -293,6 +300,7 @@ export function describeClassComponentFrame(
 
 export function describeFunctionComponentFrame(
   fn: Function,
+  ownerFn: void | null | Function,
   currentDispatcherRef: CurrentDispatcherRef,
 ): string {
   return describeNativeComponentFrame(fn, false, currentDispatcherRef);
@@ -305,6 +313,7 @@ function shouldConstruct(Component: Function) {
 
 export function describeUnknownElementTypeFrameInDEV(
   type: any,
+  ownerFn: void | null | Function,
   currentDispatcherRef: CurrentDispatcherRef,
 ): string {
   if (!__DEV__) {
@@ -321,15 +330,15 @@ export function describeUnknownElementTypeFrameInDEV(
     );
   }
   if (typeof type === 'string') {
-    return describeBuiltInComponentFrame(type);
+    return describeBuiltInComponentFrame(type, ownerFn);
   }
   switch (type) {
     case SUSPENSE_NUMBER:
     case SUSPENSE_SYMBOL_STRING:
-      return describeBuiltInComponentFrame('Suspense');
+      return describeBuiltInComponentFrame('Suspense', ownerFn);
     case SUSPENSE_LIST_NUMBER:
     case SUSPENSE_LIST_SYMBOL_STRING:
-      return describeBuiltInComponentFrame('SuspenseList');
+      return describeBuiltInComponentFrame('SuspenseList', ownerFn);
   }
   if (typeof type === 'object') {
     switch (type.$$typeof) {
@@ -337,6 +346,7 @@ export function describeUnknownElementTypeFrameInDEV(
       case FORWARD_REF_SYMBOL_STRING:
         return describeFunctionComponentFrame(
           type.render,
+          ownerFn,
           currentDispatcherRef,
         );
       case MEMO_NUMBER:
@@ -344,6 +354,7 @@ export function describeUnknownElementTypeFrameInDEV(
         // Memo may contain any component type so we recursively resolve it.
         return describeUnknownElementTypeFrameInDEV(
           type.type,
+          ownerFn,
           currentDispatcherRef,
         );
       case LAZY_NUMBER:
@@ -355,6 +366,7 @@ export function describeUnknownElementTypeFrameInDEV(
           // Lazy may contain any component type so we recursively resolve it.
           return describeUnknownElementTypeFrameInDEV(
             init(payload),
+            ownerFn,
             currentDispatcherRef,
           );
         } catch (x) {}

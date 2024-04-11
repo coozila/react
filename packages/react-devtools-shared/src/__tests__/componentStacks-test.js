@@ -101,7 +101,6 @@ describe('component stack', () => {
       {
         name: 'ServerComponent',
         env: 'Server',
-        owner: null,
       },
     ];
     const Parent = () => ChildPromise;
